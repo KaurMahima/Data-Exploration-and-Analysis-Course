@@ -1,0 +1,694 @@
+---
+title: "Presidential Tweets"
+author: "Mahima Kaur"
+date: "2023-01-19"
+output: html_document
+---
+
+## Presidential Tweets
+
+### Obtaining Recent Obama Tweets
+Firstly, we need a few R 'packages' designed specifically for playing with Tweets.
+
+```{r}
+library(rtweet)
+library(lubridate)
+library(wordcloud)
+library(tidytext)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(syuzhet)
+library(quantmod)
+```
+
+For this class assignment we were given the data of the tweets posted by Obama and trump in recent times. The Obama tweets are thpugh 2pm EST, 1.16.23
+
+#### Loading the files 
+
+```{r}
+load("~/Downloads/Obama.Rdata")
+load("~/Downloads/Trump.Rdata")
+```
+
+#### Exploratory Analysis of Obama's Tweet 
+
+##### How many tweets are there?
+
+```{r}
+dim(Obamatweets)
+```
+
+##### What are the names of the column? 
+
+```{r}
+names(Obamatweets)
+```
+
+##### What is the start time of Obama tweets?
+
+```{r}
+head(Obamatweets$created_at,1)
+```
+##### What is the  end time of Obama tweets?
+
+```{r}
+tail(Obamatweets$created_at, 1)
+```
+
+```{r}
+Encoding(Obamatweets$text) <- "UTF-8"
+```
+
+#### Now we will create a dataframe including only some important variable for analysis and renaming the headers.
+
+```{r}
+Obamatweets <- data.frame(id = Obamatweets$id,
+                          text = Obamatweets$text,
+                          date = with_tz(Obamatweets$created_at, "US/Pacific"),
+                          source = Obamatweets$source,
+                          is_quote = Obamatweets$is_quote_status,
+                          is_retweet = Obamatweets$retweeted,
+                          is_reply = !is.na(Obamatweets$in_reply_to_status_id),
+                          favorite_count = Obamatweets$favorite_count,
+                          retweet_count = Obamatweets$retweet_count,
+                          stringsAsFactors = FALSE)
+```
+
+####  After not including some of the variables in the data frame we will again see the shape of the datafram 
+
+```{r}
+dim(Obamatweets)
+```
+
+####  Now, we want to see what is the source device of the tweets, 
+
+```{r}
+table(Obamatweets$source)
+```
+
+#### We see that it is a lot of messy data so we will now clean the data so that we can get only the device name. 
+#### Reference : https://stackoverflow.com/questions/17227294/removing-html-tags-from-a-string-in-r
+
+```{r}
+cleanFun <- function(htmlString) {
+return(gsub("<.*?>", "", htmlString))
+}
+```
+
+```{r}
+Obamatweets$source <- cleanFun(Obamatweets$source)
+table(Obamatweets$source)
+```
+
+#### To clean things more we will remove the words 'Twitter' and 'for' from the source headings 
+
+```{r}
+Obamatweets$source <- gsub("Twitter |for", "", Obamatweets$source)
+table(Obamatweets$source)
+```
+
+
+Findings : Highest Number of tweets were made from Iphone and after that from Web Client. The least tweets were made from ThunderClap. 
+
+#### Now let's look at the top 10 tweets from two devices 
+
+```{r}
+head(Obamatweets$text[Obamatweets$source == "Media Studio"], 10)
+```
+
+```{r}
+head(Obamatweets$text[Obamatweets$source == " iPhone"], 10)
+```
+#### Trump's Tweet 
+
+#### Exploratory Analysis of Trumps's Tweet 
+
+##### How many tweets are there?
+
+```{r}
+dim(tweets)
+```
+
+##### What are the names of the column? 
+
+```{r}
+names(tweets)
+```
+
+##### Now we will sort the tweets in the reverse order and get the recent 2000 tweets.
+
+```{r}
+Trumptweets <- tweets[order(tweets$created_at, decreasing = TRUE), ][1:2000, ]
+```
+
+
+#### Now we will create a dataset with same variable as that of the Obama's tweets dataset. 
+
+```{r}
+Trumptweets <- data.frame(id = Trumptweets$user_id,
+                          text = Trumptweets$text,
+                          date = with_tz(Trumptweets$created_at, "US/Pacific"),
+                          source = Trumptweets$source,
+                          is_quote = Trumptweets$is_quote,
+                          is_retweet = Trumptweets$is_retweet,
+                          is_reply = !is.na(Trumptweets$reply_to_status_id),
+                          favorite_count = Trumptweets$quoted_favorite_count,
+                          retweet_count =Trumptweets$quoted_retweet_count,
+                          stringsAsFactors = FALSE)
+
+```
+
+
+##### Removing any duplicates from the datset 
+
+```{r}
+Trumptweets <- Trumptweets[!duplicated(Trumptweets), ]
+```
+
+##### Now we will recheck How many tweets are there after removing the duplicates?
+
+```{r}
+dim(Trumptweets)
+```
+
+Findings : There were 19 duplicates which got removed from the datset. 
+
+##### We will now examine the sources/devices from which the tweets were made. 
+
+```{r}
+table(Trumptweets$source)
+```
+
+##### Removing twitter and for from the source heading
+
+```{r}
+Trumptweets$source <- gsub("Twitter ", "", Trumptweets$source)
+Trumptweets$source <- gsub("for ", "", Trumptweets$source)
+```
+
+##### We will now examine the sources/devices from which the tweets were made after data cleaning. 
+
+```{r}
+table(Trumptweets$source)
+```
+
+#### A few tweets from each sources
+
+```{r}
+head(Trumptweets$text[Trumptweets$source == "iPhone"])
+```
+
+```{r}
+head(Trumptweets$text[Trumptweets$source == "Media Studio"])
+```
+
+## Data Analysis using Plots
+
+
+#### For Trump, 1981 Tweets covers about 2020-03-18 to 2020-05-21
+
+```{r}
+Trumptweets_by_date <- aggregate(Trumptweets$text ~ date(Trumptweets$date),
+                      FUN = length)
+```
+
+```{r}
+colnames(Trumptweets_by_date) <- c("date", "count")
+plot(count ~ date, data = Trumptweets_by_date )
+```
+#### if we want a line plot instead of a scatterplot 
+
+```{r}
+plot(count ~ date, data = Trumptweets_by_date, type = "l", xlab = "Date", ylab = "#Tweets", col = "red", lwd = 2)
+```
+
+#### To make the x labels finer 
+
+
+```{r}
+plot(count ~ date, data = Trumptweets_by_date, type = "l", lwd = 2, col = "red", xlab = "Date", ylab = "#Tweets", xaxt = "n")
+```
+#### Now, we want to have a proper date format on the xlabels 
+
+```{r}
+range(Trumptweets$date)
+```
+
+#### How many days are there between the range?
+
+```{r}
+range(date(Trumptweets$date))[2] - range(date(Trumptweets$date))[1]
+```
+
+
+```{r}
+xdates <- seq(from = as.Date("2020-03-18"),
+              to = as.Date("2020-05-21"), by = "months")
+```
+
+```{r}
+xdates
+```
+
+#### Now, we want the date format to %m/%d/%y
+
+```{r}
+plot(count ~ date, data = Trumptweets_by_date, type = "l", lwd = 2, col = "red", xlab = "Date", ylab = "#Tweets", xaxt = "n")
+axis(1, labels=format(xdates,"%m/%d/%y"), at = xdates)
+```
+Findings : From the plot we can see that the max number of tweets were made in the month of late April 2020. 
+
+#### Now we will see Tewwts Volume by Month 
+
+```{r}
+Trumptweets_by_month <- table(month(Trumptweets$date))
+```
+
+```{r}
+barplot(Trumptweets_by_month, xlab = "Month", ylab = "Number of all TrumpTweets", main = "Tweets Volume per Month")
+```
+
+
+
+
+
+Findings : From the barplot we can conclude that the highest volume of the tweets was the in the Month of April 2020. 
+
+
+#### Trump Tweets by Hour 
+
+```{r}
+Trumptweets_by_hour <- table(hour(Trumptweets$date))
+```
+
+```{r}
+hrs <- as.numeric(names(Trumptweets_by_hour))
+```
+
+```{r}
+plot(as.numeric(Trumptweets_by_hour) ~ hrs, type = "h", lwd = 2, col = 2, xlab = "Hour (UTC)", ylab = "Number of all TrumpTweets", main = "Tweet Volume by Hour")
+```
+
+#### Converting the time zone from UTC to EST 
+
+```{r}
+EST_hrs <- hrs - 5
+```
+
+```{r}
+EST_hrs <- EST_hrs %% 24
+```
+
+```{r}
+plot(as.numeric(Trumptweets_by_hour) ~ EST_hrs, type = "h", lwd = 2, col = 2, xlab = "Hour (EST)", ylab = "Number of all TrumpTweets", main = "Tweet Volume by Hour")
+```
+
+#### Now, Lets see what is teh daily average of the tweets tweeted by by Trump
+
+```{r}
+tweetdays <- range(date(Trumptweets$date))[2] - range(date(Trumptweets$date))[1]
+```
+
+
+```{r}
+mean_Trumptweets_by_hour <- Trumptweets_by_hour/as.numeric(tweetdays)
+```
+
+```{r}
+plot(as.numeric(mean_Trumptweets_by_hour) ~ EST_hrs, type = "h", lwd = 2, col = 2, xlab = "Hour (EST)", ylab = "Mean TrumpTweets", main = "Mean Tweet Volume by Hour")
+```
+
+
+#### What is the mean tweets per day? 
+```{r}
+round(nrow(Trumptweets)/as.numeric(tweetdays),1)
+```
+
+#### Now, Lets look at the Obama's Tweets 
+
+##### Obama's Tweets by day
+
+```{r}
+Obamatweets_by_date <- aggregate(Obamatweets$text ~ date(Obamatweets$date),
+                            FUN = length)
+colnames(Obamatweets_by_date) <- c("date", "count")
+
+plot(count ~ date, data = Obamatweets_by_date, 
+     type = "l", lwd = 2, col = 2, xlab = "Date",
+     ylab = "# Tweets", xaxt="n")
+```
+
+#### What is the range of the Obama's Tweets 
+
+```{r}
+range(Obamatweets$date)
+```
+
+#### Let's look at the years of the Obama's Twwets 
+
+```{r}
+xdates <- seq(from = as.Date("2016-04-08"),
+              to = as.Date("2023-01-13"), by = "years")
+```
+
+```{r}
+xdates
+```
+
+#### Let's make a plot with the years as the xasis and see the count per year on the y axis
+
+```{r}
+plot(count ~ date, data = Obamatweets_by_date, type = "l", lwd = 2, col = 2, xlab = "Date",
+     ylab = "# Tweets", xaxt="n")
+axis(1, labels = format(xdates, "%m/%y"), at = xdates )
+```
+#### How many days are in the dataset?
+
+```{r}
+Obamatweetdays <- range(date(Obamatweets$date))[2] - range(date(Obamatweets$date))[1]
+```
+
+```{r}
+Obamatweetdays
+```
+
+
+#### Lets see on average how many tweets are made per day 
+
+```{r}
+round(nrow(Obamatweets)/as.numeric(Obamatweetdays),3)
+```
+
+### Trumps'Tweet Popularity 
+
+
+```{r}
+pop_by_day <- aggregate(cbind(favorite_count, retweet_count) ~ as.Date(date), data = Trumptweets, FUN = median)
+head(pop_by_day)
+
+colnames(pop_by_day)[1] <- "date"
+
+pop_by_day <- pop_by_day %>% gather(type, value, -date)
+
+ggplot(pop_by_day) + geom_line(aes(x = date, y=value, col=type))
+
+ggplot(pop_by_day)+ geom_smooth(aes(x = date, y=value, col=type))
+```
+
+
+#### Let's see some of the Trump's Favorite Tweets
+
+```{r}
+Trumptweets[order(Trumptweets$favorite_count, decreasing = T), ][1:5, c("favorite_count", "text")]
+```
+
+#### Let's see some of the Trump's Retweets Tweets
+
+```{r}
+Trumptweets[order(Trumptweets$retweet_count, decreasing = T), ][1:5, c("retweet_count", "text")]
+```
+
+#### Now lets see Obama's Tweet Popularity 
+
+```{r}
+pop_by_day <- aggregate(cbind(favorite_count, retweet_count) ~ as.Date(date), data = Obamatweets, FUN = median)
+head(pop_by_day)
+
+colnames(pop_by_day)[1] <- "date"
+
+pop_by_day <- pop_by_day %>% gather(type, value, -date)
+
+ggplot(pop_by_day) + geom_line(aes(x = date, y=value, col=type))
+
+ggplot(pop_by_day)+ geom_smooth(aes(x = date, y=value, col=type))
+
+#### Popular tweets
+#####Favorites
+Obamatweets[order(Obamatweets$favorite_count, decreasing = T), ][1:5, c("favorite_count", "text")]
+
+#####Retweets
+Obamatweets[order(Obamatweets$retweet_count, decreasing = T), ][1:5, c("retweet_count", "text")]
+Obamatweets[c(680,768,868),]
+
+```
+
+#### Who did Trump Tweet at? 
+
+```{r}
+trumptweets_at <- regmatches(Trumptweets$text, gregexec("@[^[:space:]]+" , Trumptweets$text))
+trumptweets_at <- unlist(trumptweets_at)
+trumptweets_at
+```
+
+#### Plot of Trumps top 10 tweets at 
+
+```{r}
+Trumptweets_at_tab <- sort(table(trumptweets_at), decreasing = T)
+barplot(Trumptweets_at_tab[1:10], horiz = TRUE, main = "Trump Top Tweets @")
+```
+#### Let's make th egraph more readable 
+
+```{r}
+par(las = 1, mar = c(5.1,8,4.1,2.1))
+barplot(Trumptweets_at_tab[15:1], horiz = TRUE,col = "blue", las = 1, cex.names = .8, main = "Trump Top Tweets @")
+```
+
+#### let's do some more data cleaning and processing to remove unwanted characters from the @ names
+
+```{r}
+trumptweets_at2 <- gsub("Trump*." ,"Trump", trumptweets_at)
+trumptweets_at2 <- gsub("Trump*." ,"Trump", trumptweets_at2)
+trumptweets_at2 <- gsub("[.]", "", trumptweets_at2)
+trumptweets_at2 <- gsub("[:]", "", trumptweets_at2)
+```
+
+```{r}
+trumptweets_at2_tab2 <- sort(table(trumptweets_at2), decreasing = T)
+par(las = 1, mar = c(5.1,8,4.1,2.1))
+barplot(trumptweets_at2_tab2[15:1], horiz = TRUE,col = "blue", las = 1, cex.names = .8, main = "Trump Top Tweets @")
+```
+
+#### Who did Obama Tweet at? 
+
+```{r}
+regmatches(Obamatweets$text, gregexpr("@[^[:space:]]+", Obamatweets$text))
+
+Obamatweets_at <- regmatches(Obamatweets$text, gregexpr("@[^[:space:]]+", Obamatweets$text))
+
+Obamatweets_at <- unlist(Obamatweets_at)
+Obamatweets_at
+
+Obamatweets_at_tab <- sort(table(Obamatweets_at), decreasing = TRUE)
+
+par(las = 1, mar = c(5.1,8,4.1,2.1))
+barplot(Obamatweets_at_tab[15:1], horiz = TRUE, col = 'blue', las = 1, cex.names = .8, main = "Obama Top Tweets @")
+
+#Again, remove : and . and ,
+Obamatweets_at2 <- gsub("[.]|[,]|[:]", "", Obamatweets_at)
+
+Obamatweets_at_tab2 <- sort(table(Obamatweets_at2), decreasing = TRUE)
+barplot(Obamatweets_at_tab2[15:1], horiz = TRUE, col = 'blue', las = 1, cex.names =.8, main = "Obama Top Tweets @")
+```
+
+
+#### Tweets To Words 
+
+##### Let's look at Trump's Tweets 
+
+##### First We will do some cleaning like removing links and ampersands
+
+```{r}
+Trumptweets$text_clean <- trimws(gsub("@[^[:space:]]+", "", Trumptweets$text))
+Trumptweets$text_clean <- gsub("https://t.co/[A-Za-z0-9]+", "", Trumptweets$text_clean)
+Trumptweets$text_clean <- gsub("&amp;", "&", Trumptweets$text_clean, fixed = TRUE)
+Trumptweets$text_clean <- gsub("â|ž", "", Trumptweets$text_clean)
+
+tweet_words <- Trumptweets
+tweet_words <- unnest_tokens(tweet_words, word, text_clean, strip_punct = TRUE)
+tweet_words <- tweet_words[grep("[a-z]", tweet_words$word),]
+tweet_words <- tweet_words[!(tweet_words$word %in% stop_words$word),]
+```
+
+#### which words?
+
+```{r}
+head(sort(tweet_words$word), 100)
+```
+
+
+```{r}
+tail(sort(tweet_words$word), 100)
+```
+
+#### Comparing word frequency 
+
+```{r}
+word_freq <- sort(table(tweet_words$word), decreasing = T)
+word_freq[1:50]
+```
+
+#### Let's make a plot of the word frequency
+
+```{r}
+par(las =1)
+par(mar = c(5,8,4,2), cex = .8)
+
+barplot(word_freq[15:1], horiz = T, col = "red", main = "Top 15 Tweeted words", xlab = "Count")
+```
+
+#### Let's make a word cloud to present the tweeted words frequency 
+
+```{r}
+wordcloud(names(word_freq), word_freq, min.freq = 40, random.order = F, scale = c(3,0.5), colors = brewer.pal(8, "Dark2"))
+```
+
+##### Let's look at Obama's Tweets 
+
+##### First We will do some cleaning like removing links and ampersands
+
+```{r}
+
+# remove links and clean ampersands
+Obamatweets$text_clean <- trimws(gsub("@[^[:space:]]+", "", Obamatweets$text))
+Obamatweets$text_clean <- gsub("https://t.co/[A-Za-z0-9]+", "", Obamatweets$text_clean)
+Obamatweets$text_clean <- gsub("&amp;", "&", Obamatweets$text_clean, fixed = TRUE)
+Obamatweets$text_clean <- gsub("â|ž", "", Obamatweets$text_clean)
+
+tweet_words <- Obamatweets
+tweet_words <- unnest_tokens(tweet_words, word, text_clean, strip_punct = TRUE)
+tweet_words <- tweet_words[grep("[a-z]", tweet_words$word),]
+tweet_words <- tweet_words[!(tweet_words$word %in% stop_words$word),]
+
+# which words?
+head(sort(tweet_words$word), 100)
+tail(sort(tweet_words$word), 100)
+```
+
+
+Comparing word frequencies
+
+```{r}
+word_freq <- sort(table(tweet_words$word), decreasing = TRUE)
+word_freq[1:50]
+```
+Wordcloud
+
+```{r}
+#decrease min.freq to increase included words
+wordcloud(names(word_freq), word_freq, min.freq = 30, random.order = FALSE,
+          scale = c(3, 0.5), colors = brewer.pal(8, "Dark2"))
+```
+
+### Sentiment Analysis 
+
+#### Let's get the sentiment of Trump's tweet 
+
+```{r}
+sent_df <- get_nrc_sentiment(Trumptweets$text_clean)
+head(sent_df)
+
+```
+
+
+```{r}
+sent_value <- get_sentiment(Trumptweets$text_clean)
+Trumptweets$sent <- sent_value
+```
+
+#### What's the sentiment score for his top 15 tweeted words?
+
+```{r}
+sent_value <- get_sentiment(names(word_freq[20:1]))
+names(sent_value) <- names(word_freq[20:1])
+par(mar = c(1,7,2,1))
+barplot(sent_value, horiz = TRUE, las = 1)
+```
+Hmm, maybe we should remove all the zeros
+
+```{r}
+#maybe should get rid of zeros
+sent_value <- get_sentiment(names(word_freq))
+names(sent_value) <- names(word_freq)
+sent_value <- sent_value[sent_value != 0]
+par(mar = c(1, 7, 2, 1))
+barplot(sent_value[20:1], horiz = TRUE, col = 'red', las = 1)
+
+```
+#### Let's get rid of retweets since these aren't his words.
+
+```{r}
+Trumptweets_words <- Trumptweets[Trumptweets$is_retweet == "FALSE", ]
+```
+
+#### Most negative tweets:
+
+```{r}
+worst5 <- order(Trumptweets_words$sent)[1:5]
+Trumptweets_words$text_clean[worst5]
+```
+
+#### Most positive tweets:
+
+```{r}
+best5 <- order(Trumptweets_words$sent, decreasing = TRUE)[1:5]
+Trumptweets_words$text_clean[best5]
+```
+
+#### A quick look at sentiment over time:
+
+```{r}
+Trumptweets_words$date2 <- date(Trumptweets_words$date)
+ggplot(Trumptweets_words) + geom_smooth(aes(x = date2, y = sent))
+```
+
+
+#### Now, Lets have a look at sentiment analysis of Obama's Tweets 
+
+```{r}
+
+#Let's get the sentiments of current tweets - this takes a second to run
+sent_df <- get_nrc_sentiment(Obamatweets$text_clean)
+head(sent_df)
+sent_value <- get_sentiment(Obamatweets$text_clean)
+Obamatweets$sent <- sent_value
+```
+
+What's the sentiment score for his top 15 tweeted words without the zeros?
+
+```{r}
+sent_value <- get_sentiment(names(word_freq))
+names(sent_value) <- names(word_freq)
+sent_value <- sent_value[sent_value != 0]
+par(mar = c(1, 7, 2, 1))
+barplot(sent_value[20:1], horiz = TRUE, col = 'red', las = 1)
+```
+
+Let's get rid of retweets since these aren't his words.
+
+```{r}
+Obamatweets_words <- Obamatweets[Obamatweets$is_retweet == FALSE, ]
+```
+
+Most negative tweets:
+
+```{r}
+worst5 <- order(Obamatweets_words$sent)[1:5]
+Obamatweets_words$text_clean[worst5]
+```
+
+Most positive tweets:
+
+```{r}
+best5 <- order(Obamatweets_words$sent, decreasing = TRUE)[1:5]
+Obamatweets_words$text_clean[best5]
+```
+A quick look at sentiment over time:
+
+```{r}
+Obamatweets_words$date2 <- date(Obamatweets_words$date)
+ggplot(Obamatweets_words) + geom_smooth(aes(x = date2, y = sent))
+```
+
+
+The end!
